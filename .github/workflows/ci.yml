@@ -79,8 +79,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $opensslVersion = "3.5.4"
+          $opensslVersion = "3.6.2"
           choco install openssl --version $opensslVersion --no-progress -y
+          if ($LASTEXITCODE -ne 0) {
+            throw "Chocolatey failed to install OpenSSL $opensslVersion"
+          }
           $roots = @(
             "C:\Program Files\OpenSSL",
             "C:\Program Files\OpenSSL-Win64",
