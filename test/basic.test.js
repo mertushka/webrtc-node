@@ -169,7 +169,7 @@ function closeAll(...peers) {
 
 async function closeAllAndWait(...peers) {
   closeAll(...peers);
-  await delay(process.platform === "win32" ? 100 : 50);
+  await delay(250);
 }
 
 test("RTCSessionDescription and RTCIceCandidate expose WebRTC-shaped JSON", () => {
