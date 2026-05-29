@@ -780,7 +780,15 @@ struct PeerBinding : public std::enable_shared_from_this<PeerBinding> {
 	}
 
 	void ClosePeer() {
-		Shutdown(false);
+		auto self = shared_from_this();
+		std::thread([self = std::move(self)]() {
+			try {
+				// libdatachannel's public close() is graceful SCTP shutdown; releasing the
+				// peer runs the destructor path that closes transports and joins processors.
+				self->Shutdown(true);
+			} catch (...) {
+			}
+		}).detach();
 	}
 
 	void Destroy() {
@@ -829,13 +837,12 @@ private:
 		for (auto &channel : channelSnapshot)
 			channel->Destroy();
 		DeactivateCallbacks();
-		for (auto &channel : channelSnapshot)
-			channel->Close();
-		if (peerConnection)
-			peerConnection->close();
-		dispatcher->Close();
-		if (releaseNative)
+		if (releaseNative) {
 			peerConnection.reset();
+		} else if (peerConnection) {
+			peerConnection->close();
+		}
+		dispatcher->Close();
 	}
 
 	void AttachCallbacks() {
