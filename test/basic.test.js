@@ -417,13 +417,11 @@ test("connected data-channel ICE transport does not remain new while candidates 
   const offerer = new RTCPeerConnection();
   const answerer = new RTCPeerConnection();
   t.after(() => closeAllAndWait(offerer, answerer));
-  const local = offerer.createDataChannel("ice-gathering");
-  const remotePromise = waitFor(answerer, "datachannel");
+  offerer.createDataChannel("ice-gathering", { negotiated: true, id: 11 });
+  answerer.createDataChannel("ice-gathering", { negotiated: true, id: 11 });
 
   await exchangeOfferAnswer(offerer, answerer);
-  const remote = (await remotePromise).channel;
-  await waitForOpen(local);
-  await waitForOpen(remote);
+  await waitForSctpConnected(offerer, answerer);
 
   const allowedStates = new Set(["gathering", "complete"]);
   assert.equal(allowedStates.has(offerer.sctp.transport.iceTransport.gatheringState), true);
