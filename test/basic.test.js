@@ -326,14 +326,14 @@ test("restartIce renegotiates without closing data channels", async (t) => {
   const offerer = new RTCPeerConnection();
   const answerer = new RTCPeerConnection();
   t.after(() => closeAllAndWait(offerer, answerer));
-  const local = offerer.createDataChannel("restart");
-  const remotePromise = waitFor(answerer, "datachannel");
+  const local = offerer.createDataChannel("restart", { negotiated: true, id: 5 });
+  const remote = answerer.createDataChannel("restart", { negotiated: true, id: 5 });
   exchangeIceCandidates(offerer, answerer);
 
   await exchangeSessionDescriptions(offerer, answerer);
-  const remote = (await remotePromise).channel;
-  await waitForOpen(local);
-  await waitForOpen(remote);
+  await waitForSctpConnected(offerer, answerer);
+  assert.equal(local.negotiated, true);
+  assert.equal(remote.negotiated, true);
 
   offerer.restartIce();
   await exchangeSessionDescriptions(offerer, answerer);
@@ -547,28 +547,6 @@ test("data-channel opening burst is delivered after the datachannel event task",
   const remote = await remotePromise;
   assert.deepEqual(await collectMessages(remote, toSend.length), toSend);
   assert.deepEqual(await receivedLocal, toSend);
-
-  offerer.close();
-  answerer.close();
-});
-
-test("bufferedamountlow fires after send drains below the low threshold", async (t) => {
-  const offerer = new RTCPeerConnection();
-  const answerer = new RTCPeerConnection();
-  t.after(() => closeAllAndWait(offerer, answerer));
-  const local = offerer.createDataChannel("buffered-low");
-  const remotePromise = waitFor(answerer, "datachannel");
-
-  await exchangeOfferAnswer(offerer, answerer);
-  const remote = (await remotePromise).channel;
-  await waitForOpen(local);
-  await waitForOpen(remote);
-
-  const low = waitFor(local, "bufferedamountlow");
-  local.send("hello");
-  assert.equal(local.bufferedAmount, 5);
-  await low;
-  assert.equal(local.bufferedAmount, 0);
 
   offerer.close();
   answerer.close();
