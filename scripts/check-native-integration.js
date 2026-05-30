@@ -64,11 +64,26 @@ forbidMatch("NAN namespace usage", addon, /\bNan::/);
 forbidMatch("non-Node-API module initializer", addon, /\bNODE_MODULE\s*\(/);
 
 const callbackCallMatches = [...addon.matchAll(/\bcallback\.Call\s*\(/g)];
-if (callbackCallMatches.length !== 1) {
+if (callbackCallMatches.length !== 3) {
   fail(
-    `expected exactly one callback.Call site inside EventDispatcher::Dispatch, found ${callbackCallMatches.length}`,
+    `expected exactly three callback.Call sites inside EventDispatcher dispatch paths, found ${callbackCallMatches.length}`,
   );
 }
+requireMatch(
+  "single native event callback dispatch",
+  addon,
+  /callback\.Call\s*\(\s*\{\s*EventToObject/,
+);
+requireMatch(
+  "batched native event callback dispatch",
+  addon,
+  /callback\.Call\s*\(\s*\{\s*batch\s*\}\s*\)/,
+);
+requireMatch(
+  "direct native event callback dispatch",
+  addon,
+  /DispatchDirect[\s\S]*callback\.Call\s*\(\s*\{\s*EventToObject/,
+);
 
 const cmakePinMatch = /set\s*\(\s*LIBDATACHANNEL_PINNED_COMMIT\s+"([0-9a-f]{40})"/i.exec(cmake);
 if (!cmakePinMatch) fail("CMake libdatachannel pin is missing");

@@ -303,6 +303,29 @@ struct EventDispatcher : public std::enable_shared_from_this<EventDispatcher> {
 	~EventDispatcher() { Close(); }
 
 	void Emit(NativeEvent event) {
+		if (event.target != "datachannel" || event.type != "message") {
+			EmitDirect(std::move(event));
+			return;
+		}
+
+		bool scheduleDispatch = false;
+		std::lock_guard<std::mutex> lock(lifecycleMutex);
+		if (!active.load()) {
+			return;
+		}
+
+		pendingEvents.push_back(std::move(event));
+		if (!dispatchScheduled) {
+			dispatchScheduled = true;
+			scheduleDispatch = true;
+		}
+		if (!scheduleDispatch)
+			return;
+
+		QueueDispatchLocked();
+	}
+
+	void EmitDirect(NativeEvent event) {
 		auto *queued = new NativeEvent(std::move(event));
 		std::lock_guard<std::mutex> lock(lifecycleMutex);
 		if (!active.load()) {
@@ -310,13 +333,15 @@ struct EventDispatcher : public std::enable_shared_from_this<EventDispatcher> {
 			return;
 		}
 
-		napi_status status = tsfn.NonBlockingCall(queued, Dispatch);
+		napi_status status = tsfn.NonBlockingCall(queued, DispatchDirect);
 		if (status != napi_ok)
 			delete queued;
 	}
 
 	void Close() {
 		std::lock_guard<std::mutex> lock(lifecycleMutex);
+		pendingEvents.clear();
+		dispatchScheduled = false;
 		if (active.exchange(false))
 			tsfn.Release();
 	}
@@ -325,10 +350,72 @@ private:
 	EventDispatcher(Napi::Env env, Napi::Function callback)
 	    : tsfn(Napi::ThreadSafeFunction::New(env, callback, "webrtc-node events", 0, 1)) {}
 
-	static void Dispatch(Napi::Env env, Napi::Function callback, NativeEvent *event);
+	void Drain(Napi::Env env, Napi::Function callback) {
+		std::vector<NativeEvent> events;
+		{
+			std::lock_guard<std::mutex> lock(lifecycleMutex);
+			if (pendingEvents.empty()) {
+				dispatchScheduled = false;
+				return;
+			}
+			events.swap(pendingEvents);
+		}
+
+		if (events.size() == 1) {
+			callback.Call({EventToObject(env, events.front())});
+		} else {
+			Napi::Array batch = Napi::Array::New(env, events.size());
+			for (uint32_t i = 0; i < events.size(); ++i)
+				batch.Set(i, EventToObject(env, events[i]));
+			callback.Call({batch});
+		}
+
+		std::lock_guard<std::mutex> lock(lifecycleMutex);
+		if (!active.load() || pendingEvents.empty()) {
+			dispatchScheduled = false;
+			return;
+		}
+		QueueDispatchLocked();
+	}
+
+	void QueueDispatchLocked() {
+		auto *dispatcher = new std::shared_ptr<EventDispatcher>(shared_from_this());
+		napi_status status = tsfn.NonBlockingCall(dispatcher, DispatchQueued);
+		if (status != napi_ok) {
+			dispatchScheduled = false;
+			pendingEvents.clear();
+			delete dispatcher;
+		}
+	}
+
+	static void DispatchQueued(Napi::Env env, Napi::Function callback,
+	                           std::shared_ptr<EventDispatcher> *dispatcher) {
+		std::shared_ptr<EventDispatcher> scoped = std::move(*dispatcher);
+		delete dispatcher;
+		scoped->Drain(env, callback);
+	}
+
+	static void DispatchDirect(Napi::Env env, Napi::Function callback, NativeEvent *event) {
+		std::unique_ptr<NativeEvent> scoped(event);
+		callback.Call({EventToObject(env, *scoped)});
+	}
+
+	static Napi::Value MessagePayloadToValue(Napi::Env env, const NativeEvent &event) {
+		if (!event.binary)
+			return Napi::String::New(env, event.text);
+
+		Napi::ArrayBuffer buffer = Napi::ArrayBuffer::New(env, event.bytes.size());
+		if (!event.bytes.empty())
+			std::memcpy(buffer.Data(), event.bytes.data(), event.bytes.size());
+		return buffer;
+	}
+
+	static Napi::Object EventToObject(Napi::Env env, const NativeEvent &event);
 
 	std::atomic<bool> active{true};
 	std::mutex lifecycleMutex;
+	std::vector<NativeEvent> pendingEvents;
+	bool dispatchScheduled = false;
 	Napi::ThreadSafeFunction tsfn;
 };
 
@@ -619,49 +706,40 @@ private:
 
 Napi::FunctionReference NativeDataChannel::constructor;
 
-void EventDispatcher::Dispatch(Napi::Env env, Napi::Function callback, NativeEvent *event) {
-	std::unique_ptr<NativeEvent> scoped(event);
-
+Napi::Object EventDispatcher::EventToObject(Napi::Env env, const NativeEvent &event) {
 	Napi::Object object = Napi::Object::New(env);
-	object.Set("target", scoped->target);
-	object.Set("type", scoped->type);
-	if (scoped->channelId)
-		object.Set("channelId", scoped->channelId);
-	if (!scoped->state.empty())
-		object.Set("state", scoped->state);
-	if (!scoped->descriptionType.empty()) {
+	object.Set("target", event.target);
+	object.Set("type", event.type);
+	if (event.channelId)
+		object.Set("channelId", event.channelId);
+	if (!event.state.empty())
+		object.Set("state", event.state);
+	if (!event.descriptionType.empty()) {
 		Napi::Object description = Napi::Object::New(env);
-		description.Set("type", scoped->descriptionType);
-		description.Set("sdp", scoped->sdp);
+		description.Set("type", event.descriptionType);
+		description.Set("sdp", event.sdp);
 		object.Set("description", description);
 	}
-	if (!scoped->candidate.empty() || !scoped->mid.empty()) {
+	if (!event.candidate.empty() || !event.mid.empty()) {
 		Napi::Object candidate = Napi::Object::New(env);
-		candidate.Set("candidate", scoped->candidate);
-		if (!scoped->mid.empty())
-			candidate.Set("sdpMid", scoped->mid);
+		candidate.Set("candidate", event.candidate);
+		if (!event.mid.empty())
+			candidate.Set("sdpMid", event.mid);
 		object.Set("candidate", candidate);
 	}
-	if (!scoped->error.empty())
-		object.Set("error", scoped->error);
-	if (scoped->type == "message") {
-		object.Set("binary", scoped->binary);
-		if (scoped->binary) {
-			Napi::ArrayBuffer buffer = Napi::ArrayBuffer::New(env, scoped->bytes.size());
-			if (!scoped->bytes.empty())
-				std::memcpy(buffer.Data(), scoped->bytes.data(), scoped->bytes.size());
-			object.Set("data", buffer);
-		} else {
-			object.Set("data", scoped->text);
-		}
+	if (!event.error.empty())
+		object.Set("error", event.error);
+	if (event.type == "message") {
+		object.Set("binary", event.binary);
+		object.Set("data", MessagePayloadToValue(env, event));
 	}
-	if (scoped->channel) {
-		object.Set("channel", NativeDataChannel::NewInstance(env, scoped->channel));
-		object.Set("channelId", scoped->channel->id);
+	if (event.channel) {
+		object.Set("channel", NativeDataChannel::NewInstance(env, event.channel));
+		object.Set("channelId", event.channel->id);
 		object.Set("channelReadyState", "open");
 	}
 
-	callback.Call({object});
+	return object;
 }
 
 Napi::Object CandidateToObject(Napi::Env env, const rtc::Candidate &candidate) {
