@@ -71,9 +71,10 @@ npm run format
 ```
 
 `npm run check` is the Biome gate used by GitHub Actions. The full Quality job
-also runs `npm run types:check`, `npm run pack:check`, and
-`npm run wpt:selection:check`. `pack:check` validates the npm source artifact
-contents. Use `npm run format` before sending a pull request.
+also runs `npm run types:check` and `npm run pack:check`. WPT selection checks
+run after the native addon is built because the WPT harness loads the public
+WebRTC facade. `pack:check` validates the npm source artifact contents. Use
+`npm run format` before sending a pull request.
 
 ## Package Artifact
 

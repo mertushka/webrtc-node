@@ -34,8 +34,6 @@ jobs:
 
       - run: npm run pack:check
 
-      - run: npm run wpt:selection:check
-
   package-artifact:
     name: Package artifact
     runs-on: ubuntu-latest
@@ -197,6 +195,8 @@ jobs:
       - run: npm run native:check
 
       - run: npm run build
+
+      - run: npm run wpt:selection:check
 
       - run: npm run wpt:smoke
 

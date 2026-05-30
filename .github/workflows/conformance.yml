@@ -37,8 +37,6 @@ jobs:
 
       - run: npm run pack:check
 
-      - run: npm run wpt:selection:check
-
   wpt-full:
     name: ${{ matrix.os }} / Node ${{ matrix.node }} / WPT
     runs-on: ${{ matrix.os }}
@@ -122,6 +120,8 @@ jobs:
       - run: npm run types:check
 
       - run: npm run wpt:ensure
+
+      - run: npm run wpt:selection:check
 
       - run: npm run wpt:test
 
