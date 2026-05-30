@@ -1,17 +1,26 @@
 ARG NODE_VERSION=20
-ARG DEBIAN_VERSION=bookworm
+ARG DEBIAN_VERSION=bullseye
 
 FROM node:${NODE_VERSION}-${DEBIAN_VERSION}
 
-RUN apt-get update && \
+ARG DEBIAN_VERSION
+
+RUN if [ "$DEBIAN_VERSION" = "bullseye" ]; then \
+      echo "deb https://archive.debian.org/debian bullseye-backports main" >> /etc/apt/sources.list; \
+    fi && \
+  apt-get update && \
   apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
-    cmake \
     git \
     libssl-dev \
     ninja-build \
     python3 && \
+  if [ "$DEBIAN_VERSION" = "bullseye" ]; then \
+      apt-get install -y --no-install-recommends -t bullseye-backports cmake; \
+    else \
+      apt-get install -y --no-install-recommends cmake; \
+    fi && \
   rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/app

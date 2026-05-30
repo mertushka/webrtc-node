@@ -54,6 +54,8 @@ Before npm publication:
   outside the working tree;
 - confirm `prebuild-linux-*`, `prebuild-macos`, `prebuild-windows`, and
   `Publish npm package` are green for the release workflow;
+- for asset-only rebuilds of an already-published version, manually dispatch
+  the `Release` workflow with `publish_npm` disabled;
 - do not create or store an `NPM_TOKEN`; the release workflow publishes through
   npm trusted publishing and GitHub Actions OIDC;
 - tag a versioned release;

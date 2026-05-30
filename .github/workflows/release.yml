@@ -7,6 +7,11 @@ on:
         description: npm distribution tag
         required: true
         default: next
+      publish_npm:
+        description: Publish to npm after uploading prebuild assets
+        required: true
+        type: boolean
+        default: true
   release:
     types: [published]
 
@@ -25,23 +30,18 @@ jobs:
         with:
           ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install build dependencies
+      - name: Build Debian glibc prebuild
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libssl-dev
-
-      - run: npm ci --ignore-scripts
-
-      - run: npm run build -- --CDWEBRTC_NODE_STATIC_OPENSSL=ON
-
-      - run: npm run prebuild:package -- --platform=linux --arch=x64 --libc=glibc
-
-      - run: node -e "const { RTCPeerConnection } = require('./'); const pc = new RTCPeerConnection(); pc.close();"
+          docker build \
+            -f build-containers/Dockerfile.debian \
+            --build-arg NODE_VERSION=20 \
+            --build-arg DEBIAN_VERSION=bullseye \
+            -t webrtc-node-prebuild-debian .
+          docker run --rm \
+            -v "$PWD:/usr/app" \
+            -w /usr/app \
+            webrtc-node-prebuild-debian \
+            sh -lc "npm ci --ignore-scripts && npm run build -- --CDWEBRTC_NODE_STATIC_OPENSSL=ON && npm run prebuild:package -- --platform=linux --arch=x64 --libc=glibc && node -e \"const { RTCPeerConnection } = require('./'); const pc = new RTCPeerConnection(); pc.close();\""
 
       - uses: actions/upload-artifact@v7
         with:
@@ -240,6 +240,7 @@ jobs:
           gh release upload "$tag" prebuild-artifacts/*.tar.gz --clobber
 
       - name: Publish to npm
+        if: github.event_name != 'workflow_dispatch' || inputs.publish_npm
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_NPM_TAG: ${{ inputs.npm_tag }}
