@@ -587,13 +587,14 @@ test("message listener added during onmessage receives later burst messages", as
   const offerer = new RTCPeerConnection();
   const answerer = new RTCPeerConnection();
   t.after(() => closeAllAndWait(offerer, answerer));
-  const local = offerer.createDataChannel("listener-burst", { negotiated: true, id: 0 });
-  const remote = answerer.createDataChannel("listener-burst", { negotiated: true, id: 0 });
+  const local = offerer.createDataChannel("listener-burst");
+  const remotePromise = waitFor(answerer, "datachannel");
   const messages = Array.from({ length: 20 }, (_, index) => `message ${index}`);
   const handlerMessages = [];
   const listenerMessages = [];
 
   await exchangeOfferAnswer(offerer, answerer);
+  const { channel: remote } = await remotePromise;
   await Promise.all([waitForOpen(local), waitForOpen(remote)]);
 
   const done = new Promise((resolve, reject) => {
