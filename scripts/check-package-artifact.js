@@ -32,7 +32,7 @@ const artifact = payload?.[0];
 if (!artifact || !Array.isArray(artifact.files)) fail("npm pack did not return file metadata");
 
 const files = new Set(artifact.files.map((file) => file.path.replace(/\\/g, "/")));
-const requiredFiles = [
+const expectedFiles = new Set([
   "package.json",
   "README.md",
   "LICENSE",
@@ -41,21 +41,15 @@ const requiredFiles = [
   "lib/index.js",
   "lib/load-native.js",
   "src/native/addon.cc",
-  "scripts/check-prebuilds.js",
   "scripts/install-native.js",
-  "scripts/package-prebuild.js",
-  "scripts/run-wpt-smoke.js",
-  "examples/datachannel.js",
-  "docs/README.md",
-  "docs/architecture.md",
-  "docs/conformance.md",
-  "docs/development.md",
-  "docs/divergences.md",
-  "wpt-manifest.json",
-];
+]);
 
-for (const file of requiredFiles) {
+for (const file of expectedFiles) {
   if (!files.has(file)) fail(`missing required file ${file}`);
+}
+
+for (const file of files) {
+  if (!expectedFiles.has(file)) fail(`unexpected file included: ${file}`);
 }
 
 const forbiddenPrefixes = [

@@ -36,18 +36,11 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "docs/README.md",
-    "docs/architecture.md",
-    "docs/conformance.md",
-    "docs/development.md",
-    "docs/divergences.md",
-    "examples",
     "lib",
-    "scripts",
-    "src",
+    "scripts/install-native.js",
+    "src/native/addon.cc",
     "CMakeLists.txt",
-    "index.d.ts",
-    "wpt-manifest.json"
+    "index.d.ts"
   ],
   "scripts": {
     "build": "cmake-js compile",
