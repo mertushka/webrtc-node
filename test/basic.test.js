@@ -582,3 +582,45 @@ test("data-channel opening burst is delivered after the datachannel event task",
   offerer.close();
   answerer.close();
 });
+
+test("message listener added during onmessage receives later burst messages", async (t) => {
+  const offerer = new RTCPeerConnection();
+  const answerer = new RTCPeerConnection();
+  t.after(() => closeAllAndWait(offerer, answerer));
+  const local = offerer.createDataChannel("listener-burst", { negotiated: true, id: 0 });
+  const remote = answerer.createDataChannel("listener-burst", { negotiated: true, id: 0 });
+  const messages = Array.from({ length: 20 }, (_, index) => `message ${index}`);
+  const handlerMessages = [];
+  const listenerMessages = [];
+
+  await exchangeOfferAnswer(offerer, answerer);
+  await Promise.all([waitForOpen(local), waitForOpen(remote)]);
+
+  const done = new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Timed out waiting for ${messages.length} burst messages`)),
+      10000,
+    );
+    remote.onmessage = (event) => {
+      if (handlerMessages.length === 0) {
+        remote.addEventListener("message", (listenerEvent) => {
+          listenerMessages.push(listenerEvent.data);
+        });
+      }
+      handlerMessages.push(event.data);
+      if (handlerMessages.length === messages.length) {
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+  });
+
+  for (const message of messages) local.send(message);
+  await done;
+
+  assert.deepEqual(handlerMessages, messages);
+  assert.deepEqual(listenerMessages, messages.slice(1));
+
+  offerer.close();
+  answerer.close();
+});
