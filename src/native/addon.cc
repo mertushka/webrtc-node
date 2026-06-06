@@ -915,6 +915,8 @@ private:
 		DeactivateCallbacks();
 		dispatcher->Close();
 		if (releaseNative) {
+			if (peerConnection)
+				peerConnection->close();
 			peerConnection.reset();
 		} else if (peerConnection) {
 			peerConnection->close();
