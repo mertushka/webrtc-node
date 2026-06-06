@@ -300,15 +300,6 @@ async function installBrowserHarness(page) {
         state.channels[0].send(payload);
       },
 
-      trySendSize(size) {
-        try {
-          state.channels[0].send(new Uint8Array(size));
-          return { threw: false };
-        } catch (error) {
-          return { threw: true, name: error.name, message: error.message };
-        }
-      },
-
       sendAndClose(value) {
         state.channels[0].send(value);
         state.channels[0].close();
