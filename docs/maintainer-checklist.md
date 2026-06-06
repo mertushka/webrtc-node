@@ -28,6 +28,10 @@ npm run wpt:check:strict
 npm run wpt:report -- --output wpt-report.md
 ```
 
+For native transport and teardown diagnostics, set
+`WEBRTC_NODE_LIBDATACHANNEL_LOG` to `error`, `warning`, `info`, `debug`, or
+`verbose` before running the focused test. Logging is disabled by default.
+
 ## Public Repository Settings
 
 - enable GitHub Actions;

@@ -3,7 +3,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <cmath>
 #include <iomanip>
@@ -34,6 +36,63 @@ struct EventDispatcher;
 struct PeerBinding;
 
 std::atomic<int> nextChannelId{1};
+
+struct PeerCloseState {
+	std::mutex mutex;
+	std::condition_variable condition;
+	size_t pending = 0;
+};
+
+PeerCloseState &GetPeerCloseState() {
+	static auto *state = new PeerCloseState();
+	return *state;
+}
+
+void BeginPeerClose() {
+	auto &state = GetPeerCloseState();
+	std::lock_guard<std::mutex> lock(state.mutex);
+	++state.pending;
+}
+
+void FinishPeerClose() {
+	auto &state = GetPeerCloseState();
+	{
+		std::lock_guard<std::mutex> lock(state.mutex);
+		--state.pending;
+	}
+	state.condition.notify_all();
+}
+
+void WaitForPeerClose() {
+	auto &state = GetPeerCloseState();
+	std::unique_lock<std::mutex> lock(state.mutex);
+	state.condition.wait(lock, [&state]() { return state.pending == 0; });
+}
+
+struct PeerTeardownWork {
+	std::shared_ptr<rtc::PeerConnection> peerConnection;
+	std::vector<std::shared_ptr<rtc::DataChannel>> dataChannels;
+};
+
+void RunPeerTeardown(PeerTeardownWork work) {
+	for (auto &dataChannel : work.dataChannels) {
+		try {
+			dataChannel->close();
+		} catch (...) {
+		}
+	}
+	work.dataChannels.clear();
+
+	try {
+		work.peerConnection->close();
+	} catch (...) {
+	}
+	// New peers may be constructed once callbacks are detached and native close
+	// has returned. Destruction stays on this thread because processor joins can
+	// be unbounded on the Node event loop.
+	FinishPeerClose();
+	work.peerConnection.reset();
+}
 
 std::string ToString(rtc::PeerConnection::State state) {
 	switch (state) {
@@ -846,6 +905,7 @@ rtc::DataChannelInit ToRtcInit(const ChannelOptions &options) {
 struct PeerBinding : public std::enable_shared_from_this<PeerBinding> {
 	static std::shared_ptr<PeerBinding> Create(rtc::Configuration config,
 	                                           std::shared_ptr<EventDispatcher> dispatcher) {
+		WaitForPeerClose();
 		auto binding =
 		    std::shared_ptr<PeerBinding>(new PeerBinding(std::move(config), std::move(dispatcher)));
 		binding->AttachCallbacks();
@@ -860,16 +920,9 @@ struct PeerBinding : public std::enable_shared_from_this<PeerBinding> {
 		return channel;
 	}
 
-	void ClosePeer() {
-		// Releasing the peer runs libdatachannel's destructor path, which closes
-		// transports and joins processors. Complete it before another peer can be
-		// constructed in the same process.
-		Shutdown(true);
-	}
+	void ClosePeer() { ScheduleShutdown(); }
 
-	void Destroy() {
-		Shutdown(true);
-	}
+	void Destroy() { ScheduleShutdown(); }
 
 	std::shared_ptr<rtc::PeerConnection> peerConnection;
 	std::shared_ptr<EventDispatcher> dispatcher;
@@ -896,9 +949,9 @@ private:
 			peerConnection->resetCallbacks();
 	}
 
-	void Shutdown(bool releaseNative) {
+	std::optional<PeerTeardownWork> PrepareShutdown() {
 		if (shutdown.exchange(true))
-			return;
+			return std::nullopt;
 
 		std::vector<std::shared_ptr<ChannelBinding>> channelSnapshot;
 		{
@@ -906,20 +959,35 @@ private:
 			channelSnapshot.reserve(channels.size());
 			for (auto &[_, channel] : channels)
 				channelSnapshot.push_back(channel);
-			if (releaseNative)
-				channels.clear();
+			channels.clear();
 		}
 
-		for (auto &channel : channelSnapshot)
+		PeerTeardownWork work;
+		work.dataChannels.reserve(channelSnapshot.size());
+		for (auto &channel : channelSnapshot) {
 			channel->Destroy();
+			if (channel->dataChannel)
+				work.dataChannels.push_back(channel->dataChannel);
+		}
 		DeactivateCallbacks();
 		dispatcher->Close();
-		if (releaseNative) {
-			if (peerConnection)
-				peerConnection->close();
-			peerConnection.reset();
-		} else if (peerConnection) {
-			peerConnection->close();
+		work.peerConnection = std::move(peerConnection);
+		return work;
+	}
+
+	void ScheduleShutdown() {
+		auto work = PrepareShutdown();
+		if (!work)
+			return;
+
+		BeginPeerClose();
+		try {
+			std::thread([work = std::move(*work)]() mutable {
+				RunPeerTeardown(std::move(work));
+			}).detach();
+		} catch (...) {
+			FinishPeerClose();
+			throw;
 		}
 	}
 
@@ -1264,7 +1332,26 @@ Napi::Value GenerateCertificate(const Napi::CallbackInfo &info) {
 	}
 }
 
+void ConfigureLibDataChannelLogging() {
+	const char *value = std::getenv("WEBRTC_NODE_LIBDATACHANNEL_LOG");
+	if (!value)
+		return;
+
+	std::string level(value);
+	if (level == "verbose")
+		rtc::InitLogger(rtc::LogLevel::Verbose);
+	else if (level == "debug")
+		rtc::InitLogger(rtc::LogLevel::Debug);
+	else if (level == "info")
+		rtc::InitLogger(rtc::LogLevel::Info);
+	else if (level == "warning")
+		rtc::InitLogger(rtc::LogLevel::Warning);
+	else if (level == "error")
+		rtc::InitLogger(rtc::LogLevel::Error);
+}
+
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
+	ConfigureLibDataChannelLogging();
 	NativeDataChannel::Init(env, exports);
 	NativePeerConnection::Init(env, exports);
 	exports.Set("generateCertificate", Napi::Function::New(env, GenerateCertificate));
