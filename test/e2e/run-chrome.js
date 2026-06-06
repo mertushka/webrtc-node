@@ -14,6 +14,8 @@ const scenarios = [
   "multiple channels keep matching stream identifiers",
   "ICE restart remains live when initiated by either peer",
   "Chrome closure propagates to Node",
+  "mixed channel modes remain stable in one Node process",
+  "candidate-by-candidate trickle ICE interoperates in both offerer directions",
   "20 alternating offerer negotiations remain stable",
 ];
 

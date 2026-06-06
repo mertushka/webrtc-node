@@ -138,6 +138,7 @@ async function installBrowserHarness(page) {
       dataChannelEvents: 0,
       bufferedAmountLow: false,
       immediateBufferedAmount: 0,
+      localCandidates: [],
     };
 
     const waitForIceGathering = (peerConnection) => {
@@ -184,6 +185,9 @@ async function installBrowserHarness(page) {
     const createPeerConnection = () => {
       const peerConnection = new RTCPeerConnection();
       state.peerConnection = peerConnection;
+      peerConnection.addEventListener("icecandidate", ({ candidate }) => {
+        if (candidate) state.localCandidates.push(candidate.toJSON());
+      });
       peerConnection.addEventListener("datachannel", ({ channel }) => {
         state.dataChannelEvents += 1;
         installChannel(channel);
@@ -208,6 +212,7 @@ async function installBrowserHarness(page) {
         state.dataChannelEvents = 0;
         state.bufferedAmountLow = false;
         state.immediateBufferedAmount = 0;
+        state.localCandidates = [];
       },
 
       prepareNegotiated(options) {
@@ -238,8 +243,34 @@ async function installBrowserHarness(page) {
         return peerConnection.localDescription.toJSON();
       },
 
+      async createTrickleOffer(label, options = {}) {
+        const peerConnection = createPeerConnection();
+        installChannel(peerConnection.createDataChannel(label, options));
+        await peerConnection.setLocalDescription(await peerConnection.createOffer());
+        return peerConnection.localDescription.toJSON();
+      },
+
+      async acceptTrickleOffer(offer) {
+        const peerConnection = createPeerConnection();
+        await peerConnection.setRemoteDescription(offer);
+        await peerConnection.setLocalDescription(await peerConnection.createAnswer());
+        return peerConnection.localDescription.toJSON();
+      },
+
       async acceptAnswer(answer) {
         await state.peerConnection.setRemoteDescription(answer);
+      },
+
+      async acceptTrickleAnswer(answer) {
+        await state.peerConnection.setRemoteDescription(answer);
+      },
+
+      takeLocalCandidates() {
+        return state.localCandidates.splice(0);
+      },
+
+      async addRemoteCandidate(candidate) {
+        await state.peerConnection.addIceCandidate(candidate);
       },
 
       async acceptRenegotiation(offer) {
@@ -451,6 +482,147 @@ async function connectChromeOfferer(page, label = "chrome-channel", options = {}
   }
 }
 
+function stripIceCandidates(description) {
+  return {
+    type: description.type,
+    sdp: description.sdp
+      .replace(/^a=candidate:.*(?:\r?\n|$)/gm, "")
+      .replace(/^a=end-of-candidates(?:\r?\n|$)/gm, ""),
+  };
+}
+
+function collectLocalCandidates(peerConnection) {
+  const candidates = [];
+  peerConnection.addEventListener("icecandidate", ({ candidate }) => {
+    if (candidate) candidates.push(candidate.toJSON());
+  });
+  return candidates;
+}
+
+async function waitForTrickleOpen(page, peerConnection, channelOrPromise, nodeCandidates) {
+  const deadline = Date.now() + DEFAULT_TIMEOUT;
+  let nodeCandidateCount = 0;
+  let chromeCandidateCount = 0;
+  let channel = channelOrPromise?.readyState ? channelOrPromise : null;
+  let channelError = null;
+  if (!channel) {
+    Promise.resolve(channelOrPromise).then(
+      (value) => {
+        channel = value;
+      },
+      (error) => {
+        channelError = error;
+      },
+    );
+  }
+
+  while (Date.now() < deadline) {
+    if (channelError) throw channelError;
+    while (nodeCandidates.length > 0) {
+      const candidate = nodeCandidates.shift();
+      await page.evaluate(
+        (remoteCandidate) => window.chromeE2E.addRemoteCandidate(remoteCandidate),
+        candidate,
+      );
+      nodeCandidateCount += 1;
+    }
+
+    const chromeCandidates = await page.evaluate(() => window.chromeE2E.takeLocalCandidates());
+    for (const candidate of chromeCandidates) {
+      await peerConnection.addIceCandidate(candidate);
+      chromeCandidateCount += 1;
+    }
+
+    const browserState = await page.evaluate(() => window.chromeE2E.snapshot());
+    if (
+      channel?.readyState === "open" &&
+      browserState.primaryState === "open" &&
+      nodeCandidateCount > 0 &&
+      chromeCandidateCount > 0
+    ) {
+      return {
+        channel,
+        chromeCandidateCount,
+        nodeCandidateCount,
+      };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  const browserState = await page.evaluate(() => window.chromeE2E.snapshot());
+  throw new Error(
+    `Timed out waiting for trickle ICE; Node=${peerConnection.connectionState}/${peerConnection.iceConnectionState}, channel=${channel?.readyState ?? null}, candidates=${nodeCandidateCount}; Chrome=${browserState.connectionState}/${browserState.iceConnectionState}, channel=${browserState.primaryState}, candidates=${chromeCandidateCount}`,
+  );
+}
+
+async function connectNodeOffererTrickle(page, label = "node-trickle") {
+  await page.evaluate(() => window.chromeE2E.reset());
+  const peerConnection = new RTCPeerConnection();
+  const nodeCandidates = collectLocalCandidates(peerConnection);
+  const channel = peerConnection.createDataChannel(label);
+  try {
+    await peerConnection.setLocalDescription(await peerConnection.createOffer());
+    const offer = stripIceCandidates(peerConnection.localDescription.toJSON());
+    const browserAnswer = await page.evaluate(
+      (remoteOffer) => window.chromeE2E.acceptTrickleOffer(remoteOffer),
+      offer,
+    );
+    const answer = stripIceCandidates(browserAnswer);
+    await peerConnection.setRemoteDescription(answer);
+    const trickleResult = await waitForTrickleOpen(page, peerConnection, channel, nodeCandidates);
+    const { channel: openChannel, ...candidateCounts } = trickleResult;
+    return {
+      answer,
+      candidateCounts,
+      channel: openChannel,
+      offer,
+      peerConnection,
+    };
+  } catch (error) {
+    await closePair(page, peerConnection);
+    throw error;
+  }
+}
+
+async function connectChromeOffererTrickle(page, label = "chrome-trickle") {
+  await page.evaluate(() => window.chromeE2E.reset());
+  const peerConnection = new RTCPeerConnection();
+  const nodeCandidates = collectLocalCandidates(peerConnection);
+  const channelPromise = waitFor(peerConnection, "datachannel").then(({ channel }) => channel);
+  try {
+    const browserOffer = await page.evaluate(
+      (channelLabel) => window.chromeE2E.createTrickleOffer(channelLabel),
+      label,
+    );
+    const offer = stripIceCandidates(browserOffer);
+    await peerConnection.setRemoteDescription(offer);
+    await peerConnection.setLocalDescription(await peerConnection.createAnswer());
+    const answer = stripIceCandidates(peerConnection.localDescription.toJSON());
+    await page.evaluate(
+      (remoteAnswer) => window.chromeE2E.acceptTrickleAnswer(remoteAnswer),
+      answer,
+    );
+    const trickleResult = await waitForTrickleOpen(
+      page,
+      peerConnection,
+      channelPromise,
+      nodeCandidates,
+    );
+    const { channel, ...candidateCounts } = trickleResult;
+    return {
+      answer,
+      candidateCounts,
+      channel,
+      offer,
+      peerConnection,
+    };
+  } catch (error) {
+    await closePair(page, peerConnection);
+    throw error;
+  }
+}
+
 async function closePair(page, peerConnection) {
   try {
     peerConnection?.close();
@@ -469,7 +641,9 @@ module.exports = {
   closePair,
   collectStrings,
   connectChromeOfferer,
+  connectChromeOffererTrickle,
   connectNodeOfferer,
+  connectNodeOffererTrickle,
   createChromeE2EContext,
   gatherLocalDescription,
   iceUfrag,
