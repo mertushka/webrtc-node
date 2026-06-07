@@ -261,6 +261,8 @@ jobs:
     needs: [changes, quality]
     if: needs.changes.outputs.chrome_e2e == 'true'
     timeout-minutes: 30
+    env:
+      WEBRTC_NODE_LIBDATACHANNEL_LOG: warning
 
     steps:
       - uses: actions/checkout@v6

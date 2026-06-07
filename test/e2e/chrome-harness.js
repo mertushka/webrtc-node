@@ -446,7 +446,7 @@ async function connectNodeOfferer(page, label = "node-channel", options = {}) {
     return { channel, peerConnection };
   } catch (error) {
     const browserState = await page.evaluate(() => window.chromeE2E.snapshot());
-    error.message = `${error.message}; Node=${peerConnection.connectionState}/${peerConnection.iceConnectionState}, channel=${channel.readyState}; Chrome=${browserState.connectionState}/${browserState.iceConnectionState}, channel=${browserState.primaryState}`;
+    error.message = `${error.message}; Node=${peerConnection.connectionState}/${peerConnection.iceConnectionState}/${peerConnection.sctp?.transport.state ?? null}/${peerConnection.sctp?.state ?? null}, channel=${channel.readyState}; Chrome=${browserState.connectionState}/${browserState.iceConnectionState}/${browserState.sctpState}, channel=${browserState.primaryState}`;
     await closePair(page, peerConnection);
     throw error;
   }
@@ -476,7 +476,7 @@ async function connectChromeOfferer(page, label = "chrome-channel", options = {}
     return { channel, peerConnection };
   } catch (error) {
     const browserState = await page.evaluate(() => window.chromeE2E.snapshot());
-    error.message = `${error.message}; Node=${peerConnection.connectionState}/${peerConnection.iceConnectionState}; Chrome=${browserState.connectionState}/${browserState.iceConnectionState}, channel=${browserState.primaryState}`;
+    error.message = `${error.message}; Node=${peerConnection.connectionState}/${peerConnection.iceConnectionState}/${peerConnection.sctp?.transport.state ?? null}/${peerConnection.sctp?.state ?? null}; Chrome=${browserState.connectionState}/${browserState.iceConnectionState}/${browserState.sctpState}, channel=${browserState.primaryState}`;
     await closePair(page, peerConnection);
     throw error;
   }

@@ -353,8 +353,11 @@ test("restartIce renegotiates without closing data channels", async (t) => {
 
   await exchangeSessionDescriptions(offerer, answerer);
   await waitForSctpConnected(offerer, answerer);
+  await Promise.all([waitForOpen(local), waitForOpen(remote)]);
   assert.equal(local.negotiated, true);
   assert.equal(remote.negotiated, true);
+  assert.equal(local.readyState, "open");
+  assert.equal(remote.readyState, "open");
 
   const previousIceUfrag = descriptionIceUfrag(offerer.localDescription);
   offerer.restartIce();
