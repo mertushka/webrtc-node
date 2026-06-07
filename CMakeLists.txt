@@ -30,10 +30,10 @@ execute_process(
 string(REPLACE "\"" "" NODE_ADDON_API_DIR "${NODE_ADDON_API_DIR}")
 string(REPLACE "\\" "/" NODE_ADDON_API_DIR "${NODE_ADDON_API_DIR}")
 
-set(LIBDATACHANNEL_PINNED_COMMIT "ca9a141f84393355f4af7a6c7b6645d2f1fc49b8" CACHE STRING
+set(LIBDATACHANNEL_PINNED_COMMIT "2059d2a3bb81dc3dc24686fdc92c90b6167ec4fd" CACHE STRING
     "Audited libdatachannel commit for this binding.")
 
-set(LIBDATACHANNEL_REPOSITORY "https://github.com/paullouisageneau/libdatachannel.git" CACHE STRING
+set(LIBDATACHANNEL_REPOSITORY "https://github.com/mertushka/libdatachannel.git" CACHE STRING
     "Repository used when the pinned libdatachannel checkout is not present locally.")
 
 set(LIBDATACHANNEL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libdatachannel" CACHE PATH

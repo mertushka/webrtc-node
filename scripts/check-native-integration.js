@@ -94,6 +94,15 @@ if (cmakePin !== manifest.libdatachannelCommit) {
   );
 }
 
+const cmakeRepositoryMatch = /set\s*\(\s*LIBDATACHANNEL_REPOSITORY\s+"([^"]+)"/i.exec(cmake);
+if (!cmakeRepositoryMatch) fail("CMake libdatachannel repository is missing");
+const cmakeRepository = cmakeRepositoryMatch[1];
+if (cmakeRepository !== manifest.libdatachannelRepository) {
+  fail(
+    `CMake libdatachannel repository ${cmakeRepository} does not match manifest ${manifest.libdatachannelRepository}`,
+  );
+}
+
 requireMatch(
   "FetchContent libdatachannel fallback",
   cmake,
@@ -135,5 +144,5 @@ if (fs.existsSync(path.join(localLibDataChannel, ".git"))) {
 }
 
 console.log(
-  `Native integration verified: Node-API addon, TSFN dispatch, libdatachannel ${cmakePin}`,
+  `Native integration verified: Node-API addon, TSFN dispatch, libdatachannel ${cmakeRepository}@${cmakePin}`,
 );

@@ -1,5 +1,6 @@
 {
-  "libdatachannelCommit": "ca9a141f84393355f4af7a6c7b6645d2f1fc49b8",
+  "libdatachannelRepository": "https://github.com/mertushka/libdatachannel.git",
+  "libdatachannelCommit": "2059d2a3bb81dc3dc24686fdc92c90b6167ec4fd",
   "wptCommit": "03169f171c797d0953b21d7388561b454fde0ad4",
   "expectedSelectedSubtests": 620,
   "expectedPass": [

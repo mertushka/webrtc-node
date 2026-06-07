@@ -31,7 +31,7 @@ Audited from `C:\Users\mertu\Desktop\webrtc-node` on 2026-05-28.
 | Phase 0 analysis before coding | Satisfied by `docs/phase0-analysis.md`, including upstream files reviewed, lifecycle/state/callback analysis, mismatch analysis, binding design, and WPT subset plan. |
 | Data-channel-first WebRTC package | Implemented in `lib/index.js`, `src/native/addon.cc`, `index.d.ts`, and tested by local/WPT gates. |
 | Node-API/N-API, no direct V8 addon API | Locally verified by `npm run native:check`; native source uses node-addon-api and `NODE_API_MODULE`. |
-| Reproducible libdatachannel integration | Implemented in `CMakeLists.txt` with pinned commit `ca9a141f84393355f4af7a6c7b6645d2f1fc49b8`; local checkout is verified by `native:check`. |
+| Reproducible libdatachannel integration | Implemented in `CMakeLists.txt` with fork commit `2059d2a3bb81dc3dc24686fdc92c90b6167ec4fd`, based on upstream `ca9a141f84393355f4af7a6c7b6645d2f1fc49b8` plus the OpenSSL DTLS input synchronization fix; repository and commit are verified by `native:check`. |
 | W3C-compatible JS facade | Covered by API/type checks, local tests, targeted WPT, and targeted Docker stress. Fresh full selected-WPT evidence is still pending after the latest close-path change. |
 | RTCDataChannel selected WPT coverage | Targeted close/send/datachannel coverage is green locally; Node 24 Docker close-race stress is green. Fresh full 620-subtest evidence is still required. |
 | RTCPeerConnection selected WPT coverage | Targeted datachannel and state coverage is green locally. Fresh full 620-subtest evidence is still required. |

@@ -5,8 +5,10 @@ is intentionally scoped to the pinned repositories checked into this workspace.
 
 ## Inputs Reviewed
 
-- `paullouisageneau/libdatachannel` at
-  `ca9a141f84393355f4af7a6c7b6645d2f1fc49b8`.
+- `mertushka/libdatachannel` at
+  `2059d2a3bb81dc3dc24686fdc92c90b6167ec4fd`, based on upstream
+  `ca9a141f84393355f4af7a6c7b6645d2f1fc49b8` with an OpenSSL DTLS input
+  synchronization fix.
 - `web-platform-tests/wpt` at
   `03169f171c797d0953b21d7388561b454fde0ad4`.
 - Upstream libdatachannel files reviewed:
@@ -50,10 +52,10 @@ Important CMake options:
   dependencies, but they reduce reproducibility.
 
 Scope decision: build the addon with the audited libdatachannel commit
-`ca9a141f84393355f4af7a6c7b6645d2f1fc49b8` and `NO_MEDIA=ON`,
+`2059d2a3bb81dc3dc24686fdc92c90b6167ec4fd` and `NO_MEDIA=ON`,
 `NO_WEBSOCKET=ON`, `NO_EXAMPLES=ON`, and `NO_TESTS=ON`. CMake prefers a local
 `libdatachannel/` checkout when present, verifies git checkouts against the pin,
-and otherwise uses `FetchContent` to fetch the pinned upstream commit. This
+and otherwise uses `FetchContent` to fetch the pinned dependency commit. This
 matches the package's `RTCPeerConnection` plus `RTCDataChannel` scope while
 keeping the native dependency reproducible.
 
