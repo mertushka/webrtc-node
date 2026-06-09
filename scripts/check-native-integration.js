@@ -149,7 +149,6 @@ requireMatch("prebuild napi build version", cmake, /napi_build_version/);
 requireMatch("release static OpenSSL option", cmake, /WEBRTC_NODE_STATIC_OPENSSL/);
 requireMatch("Linux hidden symbol visibility", cmake, /-fvisibility=hidden/);
 requireMatch("Linux hidden inline visibility", cmake, /-fvisibility-inlines-hidden/);
-requireMatch("Linux internal symbol binding", cmake, /"LINKER:-Bsymbolic"/);
 requireMatch("Linux static symbol hiding", cmake, /"LINKER:--exclude-libs,ALL"/);
 requireMatch("node-addon-api include discovery", cmake, /require\('node-addon-api'\)\.include_dir/);
 requireMatch("static libdatachannel target", cmake, /LibDataChannel::LibDataChannelStatic/);

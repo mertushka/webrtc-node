@@ -142,7 +142,6 @@ if(UNIX AND NOT APPLE)
     -fvisibility-inlines-hidden
   )
   target_link_options(${PROJECT_NAME} PRIVATE
-    "LINKER:-Bsymbolic"
     "LINKER:--exclude-libs,ALL"
   )
 endif()
