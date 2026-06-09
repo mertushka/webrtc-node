@@ -111,6 +111,14 @@ add_subdirectory("${LIBDATACHANNEL_RESOLVED_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/li
 
 find_package(OpenSSL REQUIRED)
 
+add_library(webrtc_node_certificate STATIC
+  src/native/certificate.cc
+)
+
+target_link_libraries(webrtc_node_certificate PRIVATE
+  OpenSSL::Crypto
+)
+
 add_library(${PROJECT_NAME} SHARED
   src/native/addon.cc
 )
@@ -133,7 +141,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ${CMAKE_JS_LIB}
   LibDataChannel::LibDataChannelStatic
-  OpenSSL::SSL
+  webrtc_node_certificate
 )
 
 if(UNIX AND NOT APPLE)

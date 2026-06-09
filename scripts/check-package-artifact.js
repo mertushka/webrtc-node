@@ -41,6 +41,8 @@ const expectedFiles = new Set([
   "lib/index.js",
   "lib/load-native.js",
   "src/native/addon.cc",
+  "src/native/certificate.cc",
+  "src/native/certificate.hpp",
   "scripts/install-native.js",
 ]);
 

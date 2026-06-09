@@ -39,6 +39,8 @@
     "lib",
     "scripts/install-native.js",
     "src/native/addon.cc",
+    "src/native/certificate.cc",
+    "src/native/certificate.hpp",
     "CMakeLists.txt",
     "index.d.ts"
   ],

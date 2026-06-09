@@ -152,9 +152,16 @@ jobs:
       - name: Verify static Linux addon isolation
         shell: bash
         run: |
-          npm run build -- --CDWEBRTC_NODE_STATIC_OPENSSL=ON
-          npm run prebuild:symbols:check
-          npm run tls:check
+          docker build \
+            -f build-containers/Dockerfile.debian \
+            --build-arg NODE_VERSION=20 \
+            --build-arg DEBIAN_VERSION=bullseye \
+            -t webrtc-node-ci-debian .
+          docker run --rm \
+            -v "$PWD:/usr/app" \
+            -w /usr/app \
+            webrtc-node-ci-debian \
+            sh -lc "npm ci --ignore-scripts && npm run build -- --CDWEBRTC_NODE_STATIC_OPENSSL=ON && npm run prebuild:symbols:check && npm run tls:check"
 
       - name: Pack source artifact
         id: pack

@@ -6,11 +6,13 @@ const { spawnSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
 const addonPath = path.join(root, "src", "native", "addon.cc");
+const certificatePath = path.join(root, "src", "native", "certificate.cc");
 const cmakePath = path.join(root, "CMakeLists.txt");
 const manifestPath = path.join(root, "wpt-manifest.json");
 const packagePath = path.join(root, "package.json");
 
 const addon = fs.readFileSync(addonPath, "utf8");
+const certificate = fs.readFileSync(certificatePath, "utf8");
 const cmake = fs.readFileSync(cmakePath, "utf8");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const pkg = JSON.parse(fs.readFileSync(packagePath, "utf8"));
@@ -58,6 +60,8 @@ requireMatch(
   /check-tls-coexistence\.js/,
 );
 requireMatch("native <napi.h> include", addon, /#include\s+<napi\.h>/);
+forbidMatch("direct addon OpenSSL include", addon, /#include\s+[<"]openssl\//);
+requireMatch("isolated certificate OpenSSL include", certificate, /#include\s+<openssl\/evp\.h>/);
 requireMatch("Node-API module initializer", addon, /\bNODE_API_MODULE\s*\(/);
 requireMatch("ThreadSafeFunction dispatcher", addon, /Napi::ThreadSafeFunction::New/);
 requireMatch("nonblocking callback dispatch", addon, /\.NonBlockingCall\s*\(/);
@@ -150,6 +154,16 @@ requireMatch("release static OpenSSL option", cmake, /WEBRTC_NODE_STATIC_OPENSSL
 requireMatch("Linux hidden symbol visibility", cmake, /-fvisibility=hidden/);
 requireMatch("Linux hidden inline visibility", cmake, /-fvisibility-inlines-hidden/);
 requireMatch("Linux static symbol hiding", cmake, /"LINKER:--exclude-libs,ALL"/);
+requireMatch(
+  "static certificate helper",
+  cmake,
+  /add_library\s*\(\s*webrtc_node_certificate\s+STATIC/,
+);
+requireMatch(
+  "certificate helper OpenSSL linkage",
+  cmake,
+  /target_link_libraries\s*\(\s*webrtc_node_certificate\s+PRIVATE\s+OpenSSL::Crypto/,
+);
 requireMatch("node-addon-api include discovery", cmake, /require\('node-addon-api'\)\.include_dir/);
 requireMatch("static libdatachannel target", cmake, /LibDataChannel::LibDataChannelStatic/);
 
