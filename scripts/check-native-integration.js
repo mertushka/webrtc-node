@@ -65,6 +65,7 @@ requireMatch(
   addon,
   /iceServer\.password\s*=\s*server\.Get\("credential"\)/,
 );
+forbidMatch("forced transport MTU", addon, /config\.mtu\s*=/);
 
 forbidMatch("direct V8 namespace usage", addon, /\bv8::/);
 forbidMatch("direct V8 include", addon, /#include\s+[<"]v8(?:-[^>"]+)?\.h[>"]/);

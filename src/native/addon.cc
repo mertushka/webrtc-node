@@ -819,8 +819,6 @@ rtc::Configuration ParseConfiguration(const Napi::CallbackInfo &info) {
 	rtc::Configuration config;
 	config.disableAutoNegotiation = true;
 	config.disableAutoGathering = true;
-	// Standard Ethernet MTU avoids the conservative default without requiring an API extension.
-	config.mtu = 1500;
 
 	if (info.Length() == 0 || !info[0].IsObject())
 		return config;
