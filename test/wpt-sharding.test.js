@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { mergeWptSummaries, shardForTest } = require("../scripts/wpt-sharding");
+const { assignWptSpecGroups, mergeWptSummaries, shardForTest } = require("../scripts/wpt-sharding");
 
 test("WPT shard assignment is deterministic and exhaustive", () => {
   const shardCount = 3;
@@ -23,6 +23,25 @@ test("WPT shard assignment is deterministic and exhaustive", () => {
     620,
   );
   assert.ok(Math.max(...assignments) - Math.min(...assignments) < 40);
+});
+
+test("WPT spec groups stay intact and are assigned by weight", () => {
+  const groups = [
+    { key: "dependent-file", weight: 7 },
+    { key: "large-file", weight: 12 },
+    { key: "small-file-a", weight: 3 },
+    { key: "small-file-b", weight: 2 },
+  ];
+  const first = assignWptSpecGroups(groups, 3, [2, 1, 1]);
+  const second = assignWptSpecGroups(groups, 3, [2, 1, 1]);
+
+  assert.deepEqual([...first.assignments], [...second.assignments]);
+  assert.equal(first.assignments.size, groups.length);
+  assert.ok(first.assignments.has("dependent-file"));
+  assert.equal(
+    first.loads.reduce((sum, load) => sum + load, 0),
+    28,
+  );
 });
 
 test("WPT shard merger creates one strict result set", () => {

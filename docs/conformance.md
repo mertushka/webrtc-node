@@ -45,10 +45,12 @@ npm run wpt:report -- --output wpt-report.md
 subtest to pass and fails if a worker retry was needed.
 
 Hosted Conformance uses `npm run wpt:test:sharded` with three deterministic
-subtest shards running concurrently inside each OS/Node job. The shard outputs
-are merged into the same complete `wpt-results.json`; the strict checker and
-evidence verifier still require all 620 unique subtests with no failures or
-retries.
+weighted shards running concurrently inside each OS/Node job. Ordinary WPT
+files stay within one process so file-level setup and ordering are preserved;
+files already marked for per-test isolation distribute those isolated tests
+individually. The shard outputs are merged into the same complete
+`wpt-results.json`; the strict checker and evidence verifier still require all
+620 unique subtests with no failures or retries.
 
 ## CI Evidence
 

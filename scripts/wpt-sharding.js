@@ -24,6 +24,55 @@ function shardForTest(file, name, shardCount) {
   return (hash >>> 0) % shardCount;
 }
 
+function assignWptSpecGroups(groups, shardCount, initialLoads = []) {
+  if (!Array.isArray(groups)) {
+    throw new Error("WPT spec groups must be an array");
+  }
+  if (!Number.isInteger(shardCount) || shardCount < 1) {
+    throw new Error("WPT shard count must be a positive integer");
+  }
+  if (
+    !Array.isArray(initialLoads) ||
+    initialLoads.length > shardCount ||
+    initialLoads.some((load) => !Number.isInteger(load) || load < 0)
+  ) {
+    throw new Error("WPT initial shard loads must be non-negative integers");
+  }
+
+  const loads = Array.from({ length: shardCount }, (_, index) => initialLoads[index] || 0);
+  const assignments = new Map();
+  const seenKeys = new Set();
+  const orderedGroups = groups
+    .map((group) => {
+      if (
+        !group ||
+        typeof group.key !== "string" ||
+        group.key.length === 0 ||
+        !Number.isInteger(group.weight) ||
+        group.weight < 0
+      ) {
+        throw new Error("WPT spec groups require a non-empty key and non-negative weight");
+      }
+      if (seenKeys.has(group.key)) {
+        throw new Error(`duplicate WPT spec group ${group.key}`);
+      }
+      seenKeys.add(group.key);
+      return group;
+    })
+    .sort((left, right) => right.weight - left.weight || left.key.localeCompare(right.key));
+
+  for (const group of orderedGroups) {
+    let target = 0;
+    for (let index = 1; index < shardCount; ++index) {
+      if (loads[index] < loads[target]) target = index;
+    }
+    assignments.set(group.key, target);
+    loads[target] += group.weight;
+  }
+
+  return { assignments, loads };
+}
+
 function mergeWptSummaries(summaries) {
   if (!Array.isArray(summaries) || summaries.length < 1) {
     throw new Error("at least one WPT shard summary is required");
@@ -67,6 +116,7 @@ function mergeWptSummaries(summaries) {
 }
 
 module.exports = {
+  assignWptSpecGroups,
   mergeWptSummaries,
   shardForTest,
   testIdentity,

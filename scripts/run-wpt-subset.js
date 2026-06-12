@@ -31,7 +31,7 @@ if (!Number.isInteger(shardIndex) || shardIndex < 0 || shardIndex >= shardCount)
 
 if (!isWorker) ensureWpt({ quiet: true });
 
-const { shardForTest } = require("./wpt-sharding");
+const { assignWptSpecGroups, shardForTest } = require("./wpt-sharding");
 
 const perTestIsolatedFiles = new Set([
   "webrtc/RTCPeerConnection-createDataChannel.html",
@@ -511,9 +511,7 @@ function shouldRun(spec, name) {
     !includes.some((pattern) => name.includes(pattern))
   )
     return false;
-  if (excludes.some((pattern) => name.includes(pattern))) return false;
-  if (shardCount === 1) return true;
-  return shardForTest(`${spec.file}${spec.search || ""}`, name, shardCount) === shardIndex;
+  return !excludes.some((pattern) => name.includes(pattern));
 }
 
 class FileReaderShim extends webrtc.EventTarget {
@@ -971,16 +969,16 @@ function makeTempJsonPath(name) {
 }
 
 async function runIsolated(specsToRun) {
+  if (shardCount > 1) {
+    await runSharded(specsToRun);
+    return;
+  }
+
   for (let index = 0; index < specsToRun.length; ++index) {
     const spec = specsToRun[index];
-    if (perTestIsolatedFiles.has(spec.file) || shardCount > 1) {
+    if (perTestIsolatedFiles.has(spec.file)) {
       const tests = runListWorker(spec, index);
       if (tests.length === 0) continue;
-      if (!perTestIsolatedFiles.has(spec.file)) {
-        runSpecWorker(spec, String(index));
-        await delay(workerDelayMs);
-        continue;
-      }
       for (let testIndex = 0; testIndex < tests.length; ++testIndex) {
         runSpecWorker(
           {
@@ -999,6 +997,71 @@ async function runIsolated(specsToRun) {
   }
 }
 
+async function runSharded(specsToRun) {
+  const unshardedEnv = {
+    WPT_SHARD_COUNT: "1",
+    WPT_SHARD_INDEX: "0",
+  };
+  const discoveries = specsToRun.map((spec, index) => ({
+    spec,
+    index,
+    ...discoverSpecTests(spec, index, unshardedEnv),
+  }));
+  const initialLoads = Array.from({ length: shardCount }, () => 0);
+  const specGroups = [];
+
+  for (const discovery of discoveries) {
+    if (discovery.failure) {
+      if (shardIndex === 0) recordResult(discovery.failure);
+      continue;
+    }
+    if (perTestIsolatedFiles.has(discovery.spec.file)) {
+      for (const name of discovery.tests) {
+        initialLoads[
+          shardForTest(`${discovery.spec.file}${discovery.spec.search || ""}`, name, shardCount)
+        ] += 1;
+      }
+      continue;
+    }
+    specGroups.push({
+      key: specGroupKey(discovery.spec, discovery.index),
+      weight: discovery.tests.length,
+    });
+  }
+
+  const { assignments } = assignWptSpecGroups(specGroups, shardCount, initialLoads);
+  for (const discovery of discoveries) {
+    if (discovery.failure || discovery.tests.length === 0) continue;
+    if (perTestIsolatedFiles.has(discovery.spec.file)) {
+      const selectedTests = discovery.tests.filter(
+        (name) =>
+          shardForTest(`${discovery.spec.file}${discovery.spec.search || ""}`, name, shardCount) ===
+          shardIndex,
+      );
+      for (let testIndex = 0; testIndex < selectedTests.length; ++testIndex) {
+        runSpecWorker(
+          {
+            ...discovery.spec,
+            include: undefined,
+            includeExact: [selectedTests[testIndex]],
+          },
+          `${discovery.index}-${testIndex}`,
+          unshardedEnv,
+        );
+        await delay(workerDelayMs);
+      }
+      continue;
+    }
+    if (assignments.get(specGroupKey(discovery.spec, discovery.index)) !== shardIndex) continue;
+    runSpecWorker(discovery.spec, String(discovery.index), unshardedEnv);
+    await delay(workerDelayMs);
+  }
+}
+
+function specGroupKey(spec, index) {
+  return `${spec.file}${spec.search || ""}\0${index}`;
+}
+
 function listIsolatedTests(specsToRun) {
   const tests = [];
   for (let index = 0; index < specsToRun.length; ++index) {
@@ -1008,25 +1071,39 @@ function listIsolatedTests(specsToRun) {
 }
 
 function runListWorker(spec, index) {
-  const outcome = runWorker(spec, `list-${index}`, { WPT_LIST_TESTS: "1" });
-  if (outcome.payload?.tests) return outcome.payload.tests;
-  const resultPath = `${spec.file}${spec.search || ""}`;
-  const output = [outcome.child.stderr, outcome.child.stdout].filter(Boolean).join("\n").trim();
-  recordResult({
-    file: resultPath,
-    name: "worker test discovery",
-    status: "FAIL",
-    message:
-      output || outcome.child.error?.message || `worker exited with status ${outcome.child.status}`,
-  });
+  const discovery = discoverSpecTests(spec, index);
+  if (!discovery.failure) return discovery.tests;
+  recordResult(discovery.failure);
   return [];
 }
 
-function runSpecWorker(spec, index) {
+function discoverSpecTests(spec, index, extraEnv = {}) {
+  const outcome = runWorker(spec, `list-${index}`, {
+    ...extraEnv,
+    WPT_LIST_TESTS: "1",
+  });
+  if (outcome.payload?.tests) return { tests: outcome.payload.tests, failure: null };
+  const resultPath = `${spec.file}${spec.search || ""}`;
+  const output = [outcome.child.stderr, outcome.child.stdout].filter(Boolean).join("\n").trim();
+  return {
+    tests: [],
+    failure: {
+      file: resultPath,
+      name: "worker test discovery",
+      status: "FAIL",
+      message:
+        output ||
+        outcome.child.error?.message ||
+        `worker exited with status ${outcome.child.status}`,
+    },
+  };
+}
+
+function runSpecWorker(spec, index, extraEnv = {}) {
   const attempts = [];
   for (let attempt = 0; attempt <= workerRetries; ++attempt) {
     const suffix = attempt === 0 ? `run-${index}` : `run-${index}-retry-${attempt}`;
-    const outcome = runWorker(spec, suffix);
+    const outcome = runWorker(spec, suffix, extraEnv);
     attempts.push(outcome);
     if (!workerOutcomeFailed(outcome)) break;
   }
