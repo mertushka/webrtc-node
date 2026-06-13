@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       package_spec:
-        description: npm package spec to install
+        description: npm package spec to install (tag or exact version)
         required: true
-        default: "@mertushka/webrtc-node@next"
+        default: "@mertushka/webrtc-node@latest"
   workflow_run:
     workflows: ["Release"]
     types: [completed]

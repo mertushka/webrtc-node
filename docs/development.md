@@ -165,7 +165,9 @@ The `Published Install` workflow runs after a successful `Release` workflow or
 by manual dispatch. It installs the published npm package on Linux glibc, Linux
 musl, macOS x64, macOS arm64, Windows x64, and Windows arm64, then verifies both
 CommonJS and ESM imports. It sets `WEBRTC_NODE_PREBUILD_ONLY=1` so missing or
-broken release assets fail instead of compiling from source.
+broken release assets fail instead of compiling from source. Manual runs default
+to the `latest` npm tag; pass an explicit package version or prerelease tag when
+validating another publication.
 
 The install script downloads the target archive and its sibling `.sha256`
 release asset. It enforces download limits, verifies the SHA-256 digest, accepts
