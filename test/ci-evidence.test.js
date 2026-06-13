@@ -104,6 +104,10 @@ function runEvidenceCheck(artifactsRoot) {
     {
       cwd: root,
       encoding: "utf8",
+      env: {
+        ...process.env,
+        GITHUB_ACTIONS: "false",
+      },
     },
   );
 }
