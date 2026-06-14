@@ -136,6 +136,7 @@ target_link_libraries(webrtc_node_certificate PRIVATE
 
 add_library(${PROJECT_NAME} SHARED
   src/native/addon.cc
+  ${CMAKE_JS_SRC}
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
