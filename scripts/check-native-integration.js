@@ -235,6 +235,11 @@ requireMatch(
   /target_link_libraries\s*\(\s*webrtc_node_certificate\s+PRIVATE\s+OpenSSL::Crypto/,
 );
 requireMatch("node-addon-api include discovery", cmake, /require\('node-addon-api'\)\.include_dir/);
+requireMatch(
+  "cmake-js Windows delay-load hook",
+  cmake,
+  /add_library\s*\(\s*\$\{PROJECT_NAME\}\s+SHARED\s+src\/native\/addon\.cc\s+\$\{CMAKE_JS_SRC\}\s*\)/,
+);
 requireMatch("static libdatachannel target", cmake, /LibDataChannel::LibDataChannelStatic/);
 
 if (!/^[0-9a-f]{40}$/.test(vcpkgManifest["builtin-baseline"] || "")) {
