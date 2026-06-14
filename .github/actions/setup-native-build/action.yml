@@ -80,10 +80,35 @@ runs:
           throw "Failed to bootstrap vcpkg"
         }
 
+        $toolsetVersion = $null
+        $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+        if (Test-Path $vswhere) {
+          $visualStudioRoot = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          if ($visualStudioRoot) {
+            $toolsetVersionFile = Join-Path $visualStudioRoot "VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt"
+            if (Test-Path $toolsetVersionFile) {
+              $toolsetVersion = (Get-Content $toolsetVersionFile -Raw).Trim()
+            }
+          }
+        }
+        if (-not $toolsetVersion) {
+          $toolsetVersion = if ($env:ImageVersion) {
+            "image-$env:ImageVersion"
+          } else {
+            "unknown"
+          }
+        }
+        $toolsetVersion = $toolsetVersion -replace '[^A-Za-z0-9._-]', '-'
+
         $installedDir = Join-Path $env:GITHUB_WORKSPACE "vcpkg_installed"
         $toolchainFile = Join-Path $vcpkgRoot "scripts\buildsystems\vcpkg.cmake"
 
         "triplet=$triplet" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        "toolset_version=$toolsetVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
         "VCPKG_TARGET_TRIPLET=$triplet" | Out-File -FilePath $env:GITHUB_ENV -Append
         "VCPKG_INSTALLED_DIR=$installedDir" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -94,7 +119,7 @@ runs:
       uses: actions/cache@v5
       with:
         path: vcpkg_installed
-        key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ steps.windows-vcpkg.outputs.triplet }}-${{ hashFiles('vcpkg.json') }}
+        key: vcpkg-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.windows-vcpkg.outputs.triplet }}-${{ steps.windows-vcpkg.outputs.toolset_version }}-${{ hashFiles('vcpkg.json') }}
 
     - name: Install Windows native dependencies
       if: runner.os == 'Windows'
