@@ -177,11 +177,13 @@ through a temporary path only after all checks pass.
 
 Manual `workflow_dispatch` releases expect a GitHub Release named
 `v<package.json version>` to already exist, because prebuilt archives are
-uploaded as release assets before `npm publish` runs.
+uploaded as release assets before `npm publish` runs. Manual runs default to
+asset-only mode; enable `publish_npm` explicitly and select the intended
+distribution tag when publication is required.
 
 If a release asset needs to be rebuilt for an already-published npm version, run
-the `Release` workflow manually with `publish_npm` disabled. The workflow still
-builds and uploads prebuild assets with `--clobber`, but skips `npm publish`.
+the `Release` workflow manually with its default inputs. The workflow builds and
+uploads prebuild assets with `--clobber`, but skips `npm publish`.
 
 Supported release targets are:
 

@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       npm_tag:
-        description: npm distribution tag
+        description: npm distribution tag (used only when publish_npm is enabled)
         required: true
         default: next
       publish_npm:
-        description: Publish to npm after uploading prebuild assets
+        description: Publish to npm after uploading prebuild assets (explicit opt-in)
         required: true
         type: boolean
-        default: true
+        default: false
   release:
     types: [published]
 

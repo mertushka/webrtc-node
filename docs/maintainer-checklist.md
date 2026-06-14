@@ -68,7 +68,9 @@ Before npm publication:
 - confirm the `Published Install` workflow is green for Linux glibc, Linux musl,
   macOS x64, macOS arm64, Windows x64, and Windows arm64;
 - for asset-only rebuilds of an already-published version, manually dispatch
-  the `Release` workflow with `publish_npm` disabled;
+  the `Release` workflow with its default `publish_npm` setting;
+- for an intentional manual npm publication, explicitly enable `publish_npm`
+  and verify the selected npm distribution tag;
 - do not create or store an `NPM_TOKEN`; the release workflow publishes through
   npm trusted publishing and GitHub Actions OIDC;
 - tag a versioned release;
