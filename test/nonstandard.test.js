@@ -284,12 +284,9 @@ test("enableIceUdpMux gathers on the listener port", async (t) => {
   });
   await peerConnection.setLocalDescription(await peerConnection.createOffer());
   await waitForIceGatheringComplete(peerConnection);
-  const candidateUsesMuxPort = new RegExp(
-    `^a=candidate:.*\\s${port}\\s+typ\\s+host(?:\\s|$)`,
-    "im",
-  );
-  await waitForValue(() =>
-    candidateUsesMuxPort.test(peerConnection.localDescription?.sdp ?? "") ? true : null,
+  assert.match(
+    peerConnection.localDescription?.sdp ?? "",
+    new RegExp(`^m=application ${port} `, "m"),
   );
 });
 
