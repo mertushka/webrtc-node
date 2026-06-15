@@ -272,7 +272,7 @@ test("standard setLocalDescription remains unchanged without extensions", async 
 
 test("enableIceUdpMux gathers on the listener port", async (t) => {
   const port = await unusedUdpPort();
-  const listener = new nonstandard.IceUdpMuxListener(port, "127.0.0.1");
+  const listener = new nonstandard.IceUdpMuxListener(port);
   const peerConnection = new RTCPeerConnection({ iceServers: [] });
   t.after(() => closeAll(peerConnection, listener));
 
