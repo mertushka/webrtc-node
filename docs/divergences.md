@@ -176,7 +176,10 @@ libdatachannel reports bytes buffered in its SCTP transport queue. W3C
 `bufferedAmount` increases synchronously for every `send()` call and decreases
 later. The JS facade maintains its own W3C-style counter and does not surface
 native buffered-amount-low callbacks directly because they are based on
-libdatachannel's transport queue and can race the JS-visible counter.
+libdatachannel's transport queue and can race the JS-visible counter. When
+libdatachannel has queued bytes, the facade uses native `bufferedAmount` as a
+drain guard before reducing the JS counter, so high-throughput send loops see
+backpressure while preserving synchronous W3C increases.
 
 Impact: this is intentionally shimmed in JS. The current WPT runner passes
 `RTCDataChannel-bufferedAmount.html`.

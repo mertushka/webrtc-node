@@ -284,6 +284,113 @@ test("RTCDataChannel bufferedAmountLowThreshold uses unsigned long conversion", 
   pc.close();
 });
 
+test("RTCDataChannel bufferedAmount waits for native queue drain", async (t) => {
+  const pc = new RTCPeerConnection();
+  const dc = pc.createDataChannel("native-buffered");
+  const nativeChannel = dc._native;
+  let nativeBufferedAmount = 64;
+  const fakeNativeChannel = Object.create(nativeChannel);
+  Object.defineProperty(fakeNativeChannel, "bufferedAmount", {
+    get() {
+      return nativeBufferedAmount;
+    },
+  });
+  dc._native = fakeNativeChannel;
+  t.after(() => {
+    dc._native = nativeChannel;
+    pc.close();
+  });
+
+  let lowEvents = 0;
+  dc.addEventListener("bufferedamountlow", () => {
+    lowEvents += 1;
+  });
+
+  dc._increaseBufferedAmount(32);
+  assert.equal(dc.bufferedAmount, 32);
+  await delay(50);
+  assert.equal(dc.bufferedAmount, 32);
+  assert.equal(lowEvents, 0);
+
+  nativeBufferedAmount = 0;
+  const deadline = Date.now() + 1000;
+  while (dc.bufferedAmount !== 0 && Date.now() < deadline) {
+    await delay(10);
+  }
+  assert.equal(dc.bufferedAmount, 0);
+  assert.equal(lowEvents, 1);
+});
+
+test("RTCDataChannel paired delivery consumes pending bufferedAmount decrease", async (t) => {
+  const pc = new RTCPeerConnection();
+  const dc = pc.createDataChannel("paired-native-buffered");
+  const nativeChannel = dc._native;
+  const fakeNativeChannel = Object.create(nativeChannel);
+  Object.defineProperty(fakeNativeChannel, "bufferedAmount", {
+    get() {
+      return 64;
+    },
+  });
+  dc._native = fakeNativeChannel;
+  t.after(() => {
+    dc._native = nativeChannel;
+    pc.close();
+  });
+
+  let lowEvents = 0;
+  dc.addEventListener("bufferedamountlow", () => {
+    lowEvents += 1;
+  });
+
+  dc._increaseBufferedAmount(32);
+  assert.equal(dc.bufferedAmount, 32);
+  assert.equal(dc._pendingBufferedAmountDecrease, 32);
+
+  dc._decreaseBufferedAmountForPairedDelivery(32);
+  assert.equal(dc.bufferedAmount, 0);
+  assert.equal(dc._pendingBufferedAmountDecrease, 0);
+  assert.equal(lowEvents, 1);
+
+  await delay(50);
+  assert.equal(dc.bufferedAmount, 0);
+  assert.equal(dc._pendingBufferedAmountDecrease, 0);
+  assert.equal(lowEvents, 1);
+});
+
+test("RTCDataChannel synthetic paired bufferedAmount decreases in send order", async (t) => {
+  const offerer = new RTCPeerConnection();
+  const answerer = new RTCPeerConnection();
+  t.after(() => closeAllAndWait(offerer, answerer));
+
+  const local = offerer.createDataChannel("paired-buffered-order");
+  local._assignId(1);
+  local._readyState = "open";
+  const remote = answerer._createSyntheticIncomingDataChannel(local, 1);
+  remote._readyState = "open";
+  assert.equal(local._usesSyntheticPairDelivery(), true);
+
+  const observedBufferedAmounts = [];
+  const originalHandleNativeEvent = remote._handleNativeEvent.bind(remote);
+  remote._handleNativeEvent = (event, ...args) => {
+    if (event.type === "message") {
+      observedBufferedAmounts.push(local.bufferedAmount);
+    }
+    return originalHandleNativeEvent(event, ...args);
+  };
+  t.after(() => {
+    remote._handleNativeEvent = originalHandleNativeEvent;
+  });
+
+  const messagesPromise = collectMessages(remote, 2);
+  local.send("a");
+  local.send("b");
+
+  assert.equal(local.bufferedAmount, 2);
+  assert.deepEqual(await messagesPromise, ["a", "b"]);
+  assert.deepEqual(observedBufferedAmounts, [2, 1]);
+  assert.equal(local.bufferedAmount, 0);
+});
+
 test("RTCDataChannelEvent requires and exposes a channel", () => {
   const pc = new RTCPeerConnection();
   const dc = pc.createDataChannel("events");
