@@ -197,6 +197,22 @@ test("RTCSessionDescription and RTCIceCandidate expose WebRTC-shaped JSON", () =
   assert.equal(candidate.sdpMid, "0");
 });
 
+test("setRemoteDescription resolves after native-backed offer signalingstatechange", async (t) => {
+  const offerer = new RTCPeerConnection();
+  const answerer = new RTCPeerConnection();
+  t.after(() => closeAllAndWait(offerer, answerer));
+  offerer.createDataChannel("timing");
+
+  const states = [];
+  answerer.addEventListener("signalingstatechange", () => states.push(answerer.signalingState));
+
+  const offer = await offerer.createOffer();
+  await answerer.setRemoteDescription(offer);
+
+  assert.equal(answerer.signalingState, "have-remote-offer");
+  assert.deepEqual(states, ["have-remote-offer"]);
+});
+
 test("once event listeners are removed before invocation", () => {
   const target = new EventTarget();
   let calls = 0;
